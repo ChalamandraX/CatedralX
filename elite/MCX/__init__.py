@@ -1,0 +1,1 @@
+"""Catedral v4.2 - MCX: Homeostasis y Optimización."""

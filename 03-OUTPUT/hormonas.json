@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-09-15T10:52:18.492964",
+  "concentracion_actual": {
+    "oxitocina_O": 0.4176,
+    "dopamina_D": 0.5878,
+    "serotonina_S": 0.5546,
+    "cortisol_C": 0.273,
+    "adrenalina_A": 0.5352,
+    "melatonina_M": 0.2
+  },
+  "estres_critico": false,
+  "contexto": {
+    "market_phase": "TENDENCIA",
+    "geometry_regime": "HIPERBOLICO",
+    "senal_combinada": "buy",
+    "last_decision": "buy",
+    "carga_mental": 0.1978,
+    "hamiltoniano": 0.1978000302060659,
+    "modo": "NORMAL"
+  }
+}

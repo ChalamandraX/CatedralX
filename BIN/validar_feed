@@ -1,0 +1,31 @@
+#!/bin/bash
+set -u
+
+FILE="/dev/shm/catedral/cathedral_snapshot.json"
+if [[ ! -f "/dev/shm/cathedral_snapshot.json" ]]; then
+    FILE="/dev/shm/cathedral_snapshot.json"
+fi
+
+echo "--- Validando $FILE ---"
+echo "Criterio: Si 3 ticks seguidos son idénticos, el feed está muerto."
+echo ""
+
+last=""
+while true; do
+    if [[ ! -f "$FILE" ]]; then
+        printf '%s FILE NOT FOUND\n' "$(date +%H:%M:%S)"
+        sleep 1
+        continue
+    fi
+
+    curr=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("PERCEIVE", {}).get("historico", [])[-3:])' "$FILE" 2>/dev/null)
+    if [[ -z "$curr" ]]; then
+        printf '%s INVALID OR EMPTY JSON\n' "$(date +%H:%M:%S)"
+    elif [[ "$curr" == "$last" ]]; then
+        printf '%s CONGELADO %s\n' "$(date +%H:%M:%S)" "$curr"
+    else
+        printf '%s VIVO %s\n' "$(date +%H:%M:%S)" "$curr"
+    fi
+    last="$curr"
+    sleep 1
+done
