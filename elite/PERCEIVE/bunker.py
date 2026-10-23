@@ -16,12 +16,18 @@ if str(BASE_DIR) not in sys.path:
 
 from REASON.orchestrator import Orchestrator
 from REASON.schemas import SensoryInput
-from DSX.DEFENSE.guardian_ram import hay_suficiente_recurso
+from PERCEIVE.percepcion import from_snapshot
+try:
+    from DSX.DEFENSE.guardian_ram import hay_suficiente_recurso
+except ImportError:
+    def hay_suficiente_recurso(*args, **kwargs) -> bool:
+        # Fail closed: pause the daemon until its optional resource monitor is installed.
+        return False
 
 
 RITMO_SEGUNDOS = 15
 HURST_MIN_PUNTOS = 30
-SNAPSHOT_PATH = Path("/dev/shm/cathedral_snapshot.json")
+SNAPSHOT_PATH = Path(__import__("os").environ.get("CATEDRALX_SNAPSHOT_PATH", "/dev/shm/cathedral_snapshot.json"))
 OUTPUT_DIR = PROJECT_DIR / "03-OUTPUT"
 HORMONAS_PATH = OUTPUT_DIR / "hormonas.json"
 logger = logging.getLogger("rsx.bunker")
@@ -67,7 +73,7 @@ class BunkerDaemon:
         }
         SNAPSHOT_PATH.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
         logger.info(
-            "BTC: {:,.2f} | decision: {} | hurst: {:.3f}",
+            "BTC: %,.2f | decision: %s | hurst: %.3f",
             sensory.precio_actual,
             state.decision,
             state.percepcion_espacial.get("hurst", 0.5),
@@ -83,33 +89,23 @@ class BunkerDaemon:
 
     @staticmethod
     def _construir_entrada(snapshot: Dict[str, Any]) -> SensoryInput:
-        perceive = snapshot.get("PERCEIVE", {})
-        historical = [
-            float(value)
-            for value in perceive.get("historial_precios", perceive.get("historico", []))
-        ]
-        if not historical:
-            historical = [60000.0]
-        current = float(perceive.get("precio", historical[-1]))
-        if historical[-1] != current:
-            historical.append(current)
-        return SensoryInput(
-            precio_historico=historical,
-            precio_actual=current,
-            gap=float(perceive.get("gap", 0.0)),
-            inercia=float(perceive.get("inercia", 0.0)),
-        )
+        # No fallback prices: missing or insufficient observations fail closed.
+        return from_snapshot(snapshot)
 
     @staticmethod
     def _guardar_hormonas(state: Any) -> None:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        vector = state.neurovector if isinstance(state.neurovector, dict) else {}
         data = {
-            **state.neurovector,
+            "neurovector": vector,
             "timestamp": time.time(),
             "decision": state.decision,
             "confidence": state.confianza,
             "free_energy": state.free_energy,
             "hurst": state.percepcion_espacial.get("hurst", 0.5),
+            "trading_enabled": False,
+            "orders_created": False,
+            "orders_executed": False,
         }
         HORMONAS_PATH.write_text(
             json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8"
