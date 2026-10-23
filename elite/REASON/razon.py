@@ -8,6 +8,7 @@ if str(ELITE_DIR) not in sys.path:
     sys.path.insert(0, str(ELITE_DIR))
 
 from PERCEIVE.percepcion import from_snapshot
+from PERCEIVE.api_pulse import validate_snapshot_payload
 from REASON.orchestrator import execute_cycle, SNAPSHOT_PATH
 from FEX.FEEDBACK.feedback_loop import registrar_prediccion
 
@@ -15,6 +16,9 @@ def main() -> int:
     path = Path(os.environ.get("CATEDRALX_SNAPSHOT_PATH", str(SNAPSHOT_PATH))).expanduser()
     try:
         snapshot = json.loads(path.read_text(encoding="utf-8"))
+        freshness = validate_snapshot_payload(snapshot)
+        if not freshness["healthy"]:
+            raise ValueError("Snapshot rechazado: " + str(freshness["reason"]))
         sensory = from_snapshot(snapshot)
         state = execute_cycle(sensory)
     except (OSError, ValueError, TypeError) as exc:

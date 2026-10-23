@@ -10,11 +10,14 @@ from typing import Any, Dict, List
 
 import numpy as np
 
+from PERCEIVE.api_pulse import validate_snapshot_payload
+
 from . import anharmonic, cerebellum, free_energy, gyroscope, hurst_analyzer, mental_power
 from . import geometry
 from .financial_engine import analyze_financial_market
 from .hamiltonian import HamiltonianEngine
 from .procesador import TransductorEndocrino
+from .state_paths import canonical_state_path
 from .schemas import CathedralState, SensoryInput
 
 SNAPSHOT_PATH = Path(os.environ.get("CATEDRALX_SNAPSHOT_PATH", "/dev/shm/cathedral_snapshot.json")).expanduser()
@@ -42,15 +45,7 @@ def construir_neurovector(
 
 class Orchestrator:
     def __init__(self) -> None:
-        configured_state = os.getenv("CATEDRALX_STATE_PATH")
-        state_path = (
-            Path(configured_state).expanduser()
-            if configured_state
-            else Path.home() / ".local" / "state" / "chalamandra" / "catedralx" / "hormonas.json"
-        ).resolve()
-        repo_root = Path(__file__).resolve().parents[2]
-        if state_path == repo_root or repo_root in state_path.parents:
-            raise ValueError("CATEDRALX_STATE_PATH debe estar fuera del repositorio de CatedralX.")
+        state_path = canonical_state_path()
         self.transductor = TransductorEndocrino(output_path=state_path)
         self.ultimo_fe = 0.0
         self._gyro_filter_state = None
@@ -239,6 +234,7 @@ class Orchestrator:
         return state
 
     def bucle_infinito(self) -> None:
+        """Continuously analyze validated input without modifying its snapshot."""
         print("CatedralX Motor Financiero v1 - análisis sin ejecución de órdenes")
         while True:
             try:
@@ -246,27 +242,23 @@ class Orchestrator:
                 if not datos:
                     time.sleep(2)
                     continue
+
+                freshness = validate_snapshot_payload(datos)
+                if not freshness["healthy"]:
+                    print(
+                        "Ciclo omitido: snapshot rechazado "
+                        f"({freshness['reason']})"
+                    )
+                    time.sleep(2)
+                    continue
+
                 entrada = self._construir_sensory_input(datos)
-                estado = think(entrada, entrada.precio_historico, int(time.time()))
-                datos["REASON"] = {
-                    "decision": estado.decision,
-                    "signal_strength": estado.confianza,
-                    "signal_strength_is_probability": False,
-                    "regime": estado.regimen,
-                    "combined_signal": estado.señal_combinada,
-                    "hurst": estado.percepcion_espacial.get("hurst"),
-                    "free_energy": estado.free_energy,
-                    "hamiltoniano": estado.hamiltoniano,
-                    "energia_cognitiva": estado.energia_cognitiva,
-                    "giroscopio": estado.giroscopio,
-                    "razon_anarmonica": estado.razon_anarmonica,
-                    "analisis_financiero": estado.percepcion_espacial.get("analisis_financiero"),
-                    "orders_created": False,
-                    "orders_executed": False,
-                    "trading_enabled": False,
-                }
-                SNAPSHOT_PATH.write_text(json.dumps(datos, indent=2), encoding="utf-8")
-                print(f"Ciclo completado | Decision: {estado.decision} | Hurst: {estado.percepcion_espacial['hurst']:.4f}")
+                estado = execute_cycle(entrada)
+                hurst = estado.percepcion_espacial.get("hurst", 0.5)
+                print(
+                    f"Ciclo completado | Decision: {estado.decision} "
+                    f"| Hurst: {hurst:.4f}"
+                )
                 time.sleep(3)
             except Exception as error:
                 print(f"Error en ciclo: {error}")
@@ -334,4 +326,4 @@ def think(
     return state
 
 if __name__ == "__main__":
-    Orchestrator().bucle_infinito()
+    _think_orchestrator.bucle_infinito()

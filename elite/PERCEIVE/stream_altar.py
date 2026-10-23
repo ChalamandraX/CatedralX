@@ -20,6 +20,7 @@ BINANCE_KLINES_URL = "https://data-api.binance.vision/api/v3/klines"
 DEFAULT_SYMBOL = "BTCUSDT"
 DEFAULT_LIMIT = 60
 MIN_CLOSED_CANDLES = 30
+CANDLE_INTERVAL_MS = 60_000
 
 
 def accept_observation(payload: dict[str, Any], *, writer: Callable = write_observation):
@@ -75,6 +76,12 @@ def build_observation_from_klines(
     open_times = [item[0] for item in closed]
     if open_times != sorted(set(open_times)):
         raise ValueError("provider candles must have unique, ascending open times")
+
+    for previous, current in zip(open_times, open_times[1:]):
+        if current - previous != CANDLE_INTERVAL_MS:
+            raise ValueError(
+                "provider candles must be contiguous 1-minute intervals"
+            )
 
     last_close_time = closed[-1][3]
     age_ms = current_ms - last_close_time
