@@ -37,6 +37,9 @@ def main() -> int:
         "hurst": state.percepcion_espacial.get("hurst"),
         "free_energy": state.free_energy,
         "financial_analysis": financial,
+        "reference_price": snapshot["PERCEIVE"].get("precio"),
+        "observed_at": snapshot["PERCEIVE"].get("observed_at"),
+        "market_source": snapshot["PERCEIVE"].get("source"),
         "legacy_diagnostic_signal": state.percepcion_espacial.get("decision_subsistema_original"),
         "legacy_diagnostic_role": "diagnostico_no_autoritativo",
         "legacy_diagnostic_is_stochastic": False,
@@ -44,7 +47,7 @@ def main() -> int:
         "orders_created": False,
         "orders_executed": False,
     }
-    registrar_prediccion(result)
+    result["prediction_id"] = registrar_prediccion(result)
     print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     return 0
 
