@@ -17,12 +17,7 @@ if str(BASE_DIR) not in sys.path:
 from REASON.orchestrator import Orchestrator
 from REASON.schemas import SensoryInput
 from PERCEIVE.percepcion import from_snapshot
-try:
-    from DSX.DEFENSE.guardian_ram import hay_suficiente_recurso
-except ImportError:
-    def hay_suficiente_recurso(*args, **kwargs) -> bool:
-        # Fail closed: pause the daemon until its optional resource monitor is installed.
-        return False
+from DSX.DEFENSE.guardian_ram import hay_suficiente_recurso
 
 
 RITMO_SEGUNDOS = 15
