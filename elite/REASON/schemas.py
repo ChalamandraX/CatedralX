@@ -35,6 +35,7 @@ class SensoryInput:
     gap: float = 0.0
     inercia: float = 0.0
     free_energy_prev: float = 0.0
+    dynamic_constraints: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -52,3 +53,10 @@ class CathedralState:
     decisiones: List[Dict[str, Any]] = field(default_factory=list)
     regimen: str = "INDEFINIDO"
     señal_combinada: str = "lateral"
+    coherencia: Dict[str, Any] = field(default_factory=dict)
+    metacognicion: Dict[str, Any] = field(default_factory=dict)
+    contexto_cognitivo: Dict[str, Any] = field(default_factory=dict)
+    memory: Dict[str, Any] = field(default_factory=dict)
+    contraevidencia: Dict[str, Any] = field(default_factory=dict)
+    sources: Dict[str, Any] = field(default_factory=dict)
+    cognitive_gate_reasons: List[str] = field(default_factory=list)

@@ -87,6 +87,8 @@ def test_public_execute_cycle_uses_financial_layer_and_persists_outside_repo(tmp
     assert first.señal_combinada == second.señal_combinada == "compra"
     assert first.percepcion_espacial["analisis_financiero"] == second.percepcion_espacial["analisis_financiero"]
     assert first.percepcion_espacial["analisis_financiero"]["trading_enabled"] is False
+    assert first.percepcion_espacial["growth_allowed"] is False
+    assert first.percepcion_espacial["dynamic_constraints"]["state"] == "RESTRICCIONES_NO_VERIFICADAS"
     persisted = json.loads(state_path.read_text(encoding="utf-8"))
     assert persisted["contexto"]["decision_financiera"] == "buy"
     assert persisted["contexto"]["trading_enabled"] is False

@@ -19,6 +19,8 @@ from .hamiltonian import HamiltonianEngine
 from .procesador import TransductorEndocrino
 from .state_paths import canonical_state_path
 from .schemas import CathedralState, SensoryInput
+from .dynamic_constraints import DynamicConstraintInputs, evaluate_dynamic_constraints
+from .cognitive_state import build_cognitive_diagnostics, apply_final_decision
 
 SNAPSHOT_PATH = Path(os.environ.get("CATEDRALX_SNAPSHOT_PATH", "/dev/shm/cathedral_snapshot.json")).expanduser()
 HAMILTONIAN_PROTECTION_LIMIT = 45.0
@@ -83,12 +85,16 @@ class Orchestrator:
         inercia = float(perceive.get("inercia", 0.0))
         if not math.isfinite(gap) or not math.isfinite(inercia):
             raise ValueError("gap e inercia deben ser valores finitos.")
+        dynamic_constraints = datos_percibidos.get("DYNAMIC_CONSTRAINTS", {})
+        if not isinstance(dynamic_constraints, dict):
+            raise ValueError("DYNAMIC_CONSTRAINTS debe ser un objeto cuando se proporciona")
         return SensoryInput(
             precio_historico=precios,
             precio_actual=precio_actual,
             gap=gap,
             inercia=inercia,
             free_energy_prev=self.ultimo_fe,
+            dynamic_constraints=dynamic_constraints,
         )
 
     def ejecutar_ciclo(self, entrada: SensoryInput) -> CathedralState:
@@ -102,6 +108,43 @@ class Orchestrator:
 
         # Financial validation happens before any cognitive state is advanced or saved.
         financial = analyze_financial_market(raw_prices)
+        allowed_constraint_keys = set(DynamicConstraintInputs.__dataclass_fields__)
+        supplied_constraints = entrada.dynamic_constraints
+        if not isinstance(supplied_constraints, dict):
+            supplied_constraints = {}
+        unknown_constraint_keys = sorted(set(supplied_constraints) - allowed_constraint_keys)
+        if unknown_constraint_keys:
+            constraints_report = {
+                "state": "RESTRICCIONES_NO_VERIFICADAS",
+                "growth_allowed": False,
+                "entropy_constraint_ok": False,
+                "feedback_constraint_ok": False,
+                "scale_constraint_ok": False,
+                "issues": ["CLAVES_DE_RESTRICCION_DESCONOCIDAS"],
+                "missing_metrics": [],
+                "invalid_metrics": unknown_constraint_keys,
+                "automatic_recalibration": False,
+                "automatic_modularization": False,
+            }
+        else:
+            constraints_report = evaluate_dynamic_constraints(
+                DynamicConstraintInputs(**supplied_constraints)
+            )
+        # A measured hard-constraint breach blocks directional output. Missing
+        # calibration metrics block growth, but do not fabricate a breach.
+        measured_breach = any(issue in constraints_report["issues"] for issue in (
+            "MANTENIMIENTO_ENTROPICO", "FRENO_DINAMICO",
+            "MODULARIZAR_O_REDUCIR_EXPOSICION", "DATOS_INVALIDOS",
+            "CLAVES_DE_RESTRICCION_DESCONOCIDAS",
+        ))
+        if measured_breach:
+            financial["risk_flags"] = list(financial.get("risk_flags", []))
+            financial["risk_flags"].append("dynamic_hard_constraint")
+            financial["signal"] = "hold"
+            financial["combined_signal"] = "lateral"
+            financial["signal_strength"] = 0.0
+            financial["regime"] = "DYNAMIC_CONSTRAINT_HOLD"
+            financial["decision_reason"] = "Restricción dinámica dura activada; crecimiento bloqueado y requiere revisión."
         prices = [float(value) for value in raw_prices]
         gap = float(entrada.gap)
         inertia = float(entrada.inercia)
@@ -159,7 +202,67 @@ class Orchestrator:
                 "hamiltoniana; se requiere revisión manual."
             )
 
+        # Cognitive diagnostics are computed from the actual existing outputs.
+        # They are review gates only; this motor never creates or executes orders.
+        cycle_timestamp = int(time.time())
+        previous_state = self.transductor.leer_estado_actual()
+        previous_context = (
+            previous_state.get("contexto", {})
+            if isinstance(previous_state, dict)
+            else {}
+        )
+        if not isinstance(previous_context, dict):
+            previous_context = {}
+        cognitive = build_cognitive_diagnostics(
+            financial=financial,
+            gyro=giro,
+            hurst=h_val,
+            cross_ratio=cr_val,
+            anharmonic_score=score_anarmonico,
+            prices=prices,
+            previous_context=previous_context,
+            timestamp=cycle_timestamp,
+        )
+        candidate_decision = str(financial["signal"]).lower()
+        cognitive_gate_reasons: list[str] = []
+        if candidate_decision in {"buy", "sell"}:
+            dissonance = cognitive["coherencia"].get("disonancia")
+            if dissonance is not None and dissonance > 0.40:
+                cognitive_gate_reasons.append("COHERENCIA_DISONANTE")
+            counter_force = cognitive["contraevidencia"].get("fuerza_contra")
+            if counter_force is not None and counter_force > 0.35:
+                cognitive_gate_reasons.append("CONTRAEVIDENCIA_EXCESIVA")
+            chaos_risk = cognitive["metacognicion"].get("riesgo_caos")
+            if chaos_risk is not None and chaos_risk > 0.35:
+                cognitive_gate_reasons.append("RIESGO_CAOS_ELEVADO")
+            if cognitive["contexto_cognitivo"].get("fase_mal_definida"):
+                cognitive_gate_reasons.append("FASE_DE_MERCADO_INCIERTA")
+
+        cognitive["gate_reasons"] = cognitive_gate_reasons
+        if cognitive_gate_reasons:
+            financial["risk_flags"] = list(financial.get("risk_flags", []))
+            for reason in cognitive_gate_reasons:
+                flag = f"cognitive_{reason.lower()}"
+                if flag not in financial["risk_flags"]:
+                    financial["risk_flags"].append(flag)
+            financial["signal"] = "hold"
+            financial["combined_signal"] = "lateral"
+            financial["signal_strength"] = 0.0
+            financial["regime"] = "COGNITIVE_REVIEW_HOLD"
+            financial["decision_reason"] = (
+                f"{financial.get('decision_reason', '')} "
+                "Etiqueta direccional bloqueada por controles cognitivos: "
+                + ", ".join(cognitive_gate_reasons)
+                + "."
+            )
+
         decision = str(financial["signal"])
+        apply_final_decision(
+            cognitive,
+            decision,
+            prices[-1],
+            cycle_timestamp,
+        )
         signal_strength = float(financial["signal_strength"])
         decisions: List[Dict[str, Any]] = []
         if decision == "buy" and not financial["risk_flags"]:
@@ -196,6 +299,20 @@ class Orchestrator:
                 "trading_enabled": False,
                 "orders_created": False,
                 "orders_executed": False,
+                "dynamic_constraints": constraints_report,
+                "growth_allowed": constraints_report["growth_allowed"],
+                "candidate_decision": cognitive["candidate_decision"],
+                "final_decision": decision,
+                "cognitive_state_version": cognitive["cognitive_state_version"],
+                "cognitive_input_hash": cognitive["cognitive_input_hash"],
+                "new_observation": cognitive["new_observation"],
+                "coherencia": cognitive["coherencia"],
+                "metacognicion": cognitive["metacognicion"],
+                "contexto_cognitivo": cognitive["contexto_cognitivo"],
+                "memory": cognitive["memory"],
+                "contraevidencia": cognitive["contraevidencia"],
+                "sources": cognitive["sources"],
+                "cognitive_gate_reasons": cognitive["gate_reasons"],
             },
             "percepcion_espacial": {
                 "hurst": round(h_val, 4),
@@ -203,6 +320,17 @@ class Orchestrator:
                 "inercia": round(inertia, 6),
                 "free_energy": round(fe, 4),
                 "analisis_financiero": financial,
+                "dynamic_constraints": constraints_report,
+                "growth_allowed": constraints_report["growth_allowed"],
+                "coherencia": cognitive["coherencia"],
+                "metacognicion": cognitive["metacognicion"],
+                "contexto_cognitivo": cognitive["contexto_cognitivo"],
+                "memory": cognitive["memory"],
+                "contraevidencia": cognitive["contraevidencia"],
+                "sources": cognitive["sources"],
+                "candidate_decision": cognitive["candidate_decision"],
+                "final_decision": decision,
+                "cognitive_gate_reasons": cognitive["gate_reasons"],
                 "decision_subsistema_original": legacy_decision,
                 "decision_subsistema_original_rol": "diagnostico_no_autoritativo",
                 "decision_subsistema_original_es_estocastico": False,
@@ -231,6 +359,13 @@ class Orchestrator:
         state.decisiones = decisions
         state.regimen = str(financial["regime"])
         state.señal_combinada = str(financial["combined_signal"])
+        state.coherencia = cognitive["coherencia"]
+        state.metacognicion = cognitive["metacognicion"]
+        state.contexto_cognitivo = cognitive["contexto_cognitivo"]
+        state.memory = cognitive["memory"]
+        state.contraevidencia = cognitive["contraevidencia"]
+        state.sources = cognitive["sources"]
+        state.cognitive_gate_reasons = cognitive["gate_reasons"]
         return state
 
     def bucle_infinito(self) -> None:
@@ -295,6 +430,7 @@ def think(
         gap=gap_value,
         inercia=inertia_value,
         free_energy_prev=sensory_input.free_energy_prev,
+        dynamic_constraints=dict(sensory_input.dynamic_constraints),
     )
     # ejecutar_ciclo validates financial inputs before touching persistent state.
     state = _think_orchestrator.ejecutar_ciclo(entrada)

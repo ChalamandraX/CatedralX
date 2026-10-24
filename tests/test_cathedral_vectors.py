@@ -134,3 +134,45 @@ def test_financial_engine_holds_when_short_and_medium_momentum_disagree():
     assert momentum["medium_20"] < -0.5
     assert result["signal"] == "hold"
     assert result["signal_strength"] == 0.0
+
+
+def test_action_intent_fails_closed_without_explicit_authorization_and_metrics(tmp_path):
+    from AEX.ejecutor import preparar_intencion
+
+    intent = preparar_intencion(
+        "buy", 0.1, price=100.0, confidence=0.8, panic_path=tmp_path / ".panic"
+    )
+    assert intent["status"] == "BLOCKED_REVIEW_ONLY"
+    assert "explicit_authorization_missing" in intent["block_reasons"]
+    assert intent["orders_created"] is False
+    assert intent["orders_executed"] is False
+
+
+def test_action_intent_honors_emergency_panic_marker(tmp_path):
+    from AEX.ejecutor import preparar_intencion
+
+    marker = tmp_path / ".panic"
+    marker.write_text("emergency stop", encoding="utf-8")
+    intent = preparar_intencion(
+        "buy", 0.1, authorized=True, price=100.0, confidence=0.8, panic_path=marker
+    )
+    assert intent["panic_active"] is True
+    assert intent["status"] == "BLOCKED_REVIEW_ONLY"
+    assert "panic" in intent["block_reasons"]
+    assert intent["trading_enabled"] is False
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"price": 0, "confidence": 0.8},
+        {"price": float("inf"), "confidence": 0.8},
+        {"price": 100, "confidence": -0.1},
+        {"price": 100, "confidence": float("nan")},
+    ],
+)
+def test_action_intent_rejects_invalid_price_or_confidence(kwargs):
+    from AEX.ejecutor import preparar_intencion
+
+    with pytest.raises(ValueError):
+        preparar_intencion("buy", 0.1, authorized=True, **kwargs)

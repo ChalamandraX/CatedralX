@@ -50,3 +50,31 @@ El etiquetador usa el precio y timestamp del snapshot real, calcula el rendimien
 El informe calcula predicciones identificadas y pendientes, exactitud por horizonte, matriz de confusión, precisión y recall por clase, y métricas por régimen. El retorno alineado excluye hold y no incluye comisiones, spread, deslizamiento, dimensionamiento de posición ni contexto de cartera: no representa P&L de una estrategia ni demuestra ventaja predictiva. signal_strength sigue siendo una fuerza heurística, no una probabilidad, por lo que no se calculan métricas de calibración probabilística.
 
 El historial append-only se guarda por defecto en ~/.local/state/chalamandra/catedralx/feedback.jsonl; puede redirigirse mediante CATEDRALX_FEEDBACK_PATH. El reporte es de solo lectura. No hay reentrenamiento automático ni ejecución de órdenes. El etiquetado requiere una acción explícita tras observar cada horizonte; esta versión no incluye un programador o servicio de etiquetado continuo. Las predicciones históricas sin ID se contabilizan como registros heredados no vinculables y no se pueden puntuar retrospectivamente mediante este esquema.
+
+## Ciclo económico, impacto y reinversión gobernada
+
+`elite/FEX/GOVERNANCE/economic_cycle.py` añade un registro auditable por ciclo para conectar evidencia con decisiones de mejora: `measure → evaluate → propose → authorize → verify → feedback`. Cada medición exige métrica, fuente, periodo, unidad, fórmula, valor y timestamp con zona horaria; objetivo e incertidumbre son opcionales y explícitos. Las evaluaciones registran evidencia y no permiten afirmar causalidad sin declarar un método causal. Las propuestas incluyen resultado esperado y plan de verificación. La autorización exige aprobador y justificación explícitos.
+
+Ejemplo de uso desde la raíz del repositorio, con `PYTHONPATH=elite`:
+
+```python
+from FEX.GOVERNANCE.economic_cycle import registrar_evento, resumir_ciclos
+
+cycle_id = registrar_evento("measure", {
+    "metric": "personas_atendidas",
+    "source": "registro_servicio_v1",
+    "period": "2026-Q3",
+    "unit": "personas",
+    "formula": "conteo_unico_de_personas",
+    "value": 120,
+    "target": 150,
+    "uncertainty": 3,
+    "observed_at": "2026-10-23T10:00:00Z",
+})
+# El resto de etapas debe registrarse en orden y con el mismo cycle_id.
+print(resumir_ciclos())
+```
+
+El ledger append-only vive por defecto en `~/.local/state/chalamandra/catedralx/impact_cycle.jsonl`; se puede cambiar con `CATEDRALX_IMPACT_LEDGER_PATH`. No se inventan objetivos ni porcentajes de reinversión, no se mueve dinero, no se ejecutan órdenes, no hay reentrenamiento automático y una autorización registrada no equivale a ejecutar una acción. La medición de impacto social requiere fuentes y diseños de evaluación adecuados; una variación temporal por sí sola no demuestra causalidad.
+
+También se puede usar el CLI `python elite/bin/impact_cycle.py` o el punto de entrada de la Catedral `bash BIN/catedral impact-cycle`. Para registrar una etapa, pasa `--event measure|evaluate|propose|authorize|verify|feedback` y `--payload '{...}'`; las etapas posteriores requieren `--cycle-id` con el ID que devolvió `measure`. Para consultar el ledger usa `bash BIN/catedral impact-cycle --report`. El comando registra evidencia y estados únicamente; no ejecuta la propuesta.

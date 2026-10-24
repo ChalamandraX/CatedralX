@@ -37,6 +37,8 @@ def main() -> int:
         "hurst": state.percepcion_espacial.get("hurst"),
         "free_energy": state.free_energy,
         "financial_analysis": financial,
+        "dynamic_constraints": state.percepcion_espacial.get("dynamic_constraints", {}),
+        "growth_allowed": state.percepcion_espacial.get("growth_allowed", False),
         "reference_price": snapshot["PERCEIVE"].get("precio"),
         "observed_at": snapshot["PERCEIVE"].get("observed_at"),
         "market_source": snapshot["PERCEIVE"].get("source"),

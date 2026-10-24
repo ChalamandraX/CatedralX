@@ -20,3 +20,6 @@ venv/
 # Local logs
 logs/
 *.log
+.env
+*.key
+credentials*.json

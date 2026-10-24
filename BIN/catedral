@@ -17,11 +17,14 @@ case "${1:-status}" in
     "$PYTHON" "$ROOT/elite/bin/feed_once.py"
     exec "$PYTHON" "$ROOT/BIN/motor.py"
     ;;
+  impact-cycle)
+    exec "$PYTHON" "$ROOT/elite/bin/impact_cycle.py" "${@:2}"
+    ;;
   test|probar)
     exec "$PYTHON" -m pytest -q -p no:cacheprovider "$ROOT/tests"
     ;;
   help|-h|--help)
-    printf "%s\n" "Uso: catedral {status|feed-once|motor|ciclo|test|help}" "status muestra estado local de solo lectura" "feed-once descarga velas publicas cerradas y escribe snapshot RSX" "motor ejecuta un ciclo SCX con un snapshot RSX real y valido" "ciclo actualiza RSX y ejecuta un unico analisis SCX" "test ejecuta pruebas automatizadas" "No habilita órdenes ni inicia daemons."
+    printf "%s\n" "Uso: catedral {status|feed-once|motor|ciclo|impact-cycle|test|help}" "status muestra estado local de solo lectura" "feed-once descarga velas publicas cerradas y escribe snapshot RSX" "motor ejecuta un ciclo SCX con un snapshot RSX real y valido" "ciclo actualiza RSX y ejecuta un unico analisis SCX" "impact-cycle pasa --report o --event y argumentos al ciclo gobernado de impacto" "test ejecuta pruebas automatizadas" "No habilita órdenes ni inicia daemons."
     ;;
   *)
     echo "Comando desconocido: $1" >&2
