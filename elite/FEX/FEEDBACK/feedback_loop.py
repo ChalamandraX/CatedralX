@@ -10,10 +10,11 @@ import math
 import os
 import time
 import uuid
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from contracts.actions import normalizar_senal
 
 SCHEMA_VERSION = 1
 HORIZONS_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600}
@@ -276,9 +277,11 @@ def registrar_resultado(
 
 def _safe_signal(prediction: dict[str, Any]) -> str | None:
     signal = prediction.get("decision", prediction.get("signal"))
-    if isinstance(signal, str) and signal.lower() in SIGNALS:
-        return signal.lower()
-    return None
+    try:
+        normalized = normalizar_senal(signal)
+    except (TypeError, ValueError):
+        return None
+    return normalized if normalized in SIGNALS else None
 
 
 def _safe_return(outcome: dict[str, Any]) -> float | None:
