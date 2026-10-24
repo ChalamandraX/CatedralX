@@ -1,15 +1,18 @@
 """Endocrine homeostasis processor for the reasoning layer."""
 
 import json
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
 import numpy as np
 
+from .state_paths import canonical_state_path
 
-OUTPUT_DIR = Path(__file__).parents[2] / "03-OUTPUT"
-RUTA_HORMONAS = OUTPUT_DIR / "hormonas.json"
+
+RUTA_HORMONAS = canonical_state_path()
 
 PARAMS = {
     "prod_O": 0.05, "prod_D": 0.08, "prod_S": 0.06, "prod_C": 0.005,
@@ -34,7 +37,11 @@ class ProcesadorEndocrino:
     """Translate surprise and market dynamics into hormone concentrations."""
 
     def __init__(self, output_path: Path | None = None) -> None:
-        self.output_path = output_path or RUTA_HORMONAS
+        self.output_path = (
+            Path(output_path).expanduser().resolve()
+            if output_path is not None
+            else canonical_state_path()
+        )
         self.conc: Dict[str, float] = {
             "oxitocina_O": 0.45, "dopamina_D": 0.60, "serotonina_S": 0.50,
             "cortisol_C": 0.30, "adrenalina_A": 0.40, "melatonina_M": 0.20,
@@ -80,9 +87,23 @@ class ProcesadorEndocrino:
             "contexto": self.contexto,
         }
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.output_path.with_suffix(".tmp")
-        temporary_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        temporary_path.replace(self.output_path)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{self.output_path.name}.",
+            suffix=".tmp",
+            dir=str(self.output_path.parent),
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                json.dump(data, stream, indent=2, ensure_ascii=False, allow_nan=False)
+                stream.write("\n")
+            temporary_path.replace(self.output_path)
+        except BaseException:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
         self._estado = data
         return data
 
@@ -102,10 +123,15 @@ class ProcesadorEndocrino:
 
 
 def procesar_estado_integrado(inputs_entorno: Dict[str, Any]) -> Dict[str, Any]:
-    """Update and persist the process-wide endocrine state."""
-    procesador.volcar_estado_quimico(inputs_entorno)
-    return procesador.leer_estado_actual()
+    """Compatibility API delegated to the canonical orchestrator transducer."""
+    from .orchestrator import _think_orchestrator
+
+    transductor = _think_orchestrator.transductor
+    transductor.volcar_estado_quimico(inputs_entorno)
+    return transductor.leer_estado_actual()
 
 
+# Legacy standalone object kept for backward compatibility only.
+# Internal execution should use the transducer owned by the shared orchestrator.
 procesador = ProcesadorEndocrino()
 TransductorEndocrino = ProcesadorEndocrino

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="${CATEDRALX_PYTHON:-python3}"
+export PYTHONPATH="$ROOT/elite${PYTHONPATH:+:$PYTHONPATH}"
+case "${1:-status}" in
+  status|b-status|nexus)
+    exec "$PYTHON" "$ROOT/elite/bin/nexus.py"
+    ;;
+  feed-once)
+    exec "$PYTHON" "$ROOT/elite/bin/feed_once.py"
+    ;;
+  motor)
+    exec "$PYTHON" "$ROOT/BIN/motor.py"
+    ;;
+  ciclo)
+    "$PYTHON" "$ROOT/elite/bin/feed_once.py"
+    exec "$PYTHON" "$ROOT/BIN/motor.py"
+    ;;
+  test|probar)
+    exec "$PYTHON" -m pytest -q -p no:cacheprovider "$ROOT/tests"
+    ;;
+  help|-h|--help)
+    printf "%s\n" "Uso: catedral {status|feed-once|motor|ciclo|test|help}" "status muestra estado local de solo lectura" "feed-once descarga velas publicas cerradas y escribe snapshot RSX" "motor ejecuta un ciclo SCX con un snapshot RSX real y valido" "ciclo actualiza RSX y ejecuta un unico analisis SCX" "test ejecuta pruebas automatizadas" "No habilita órdenes ni inicia daemons."
+    ;;
+  *)
+    echo "Comando desconocido: $1" >&2
+    exit 2
+    ;;
+esac
